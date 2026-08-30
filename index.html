@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#2563eb">
+<title>Pointage Caméra</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#f3f6fa;
+  color:#172033;
+}
+header{
+  background:#2563eb;
+  color:#fff;
+  padding:18px 15px;
+  text-align:center;
+}
+header h1{margin:0;font-size:22px}
+header p{margin:6px 0 0;font-size:13px;opacity:.9}
+main{width:min(900px,100%);margin:auto;padding:14px}
+.card{
+  background:#fff;
+  border-radius:15px;
+  padding:16px;
+  margin-bottom:14px;
+  box-shadow:0 3px 15px rgba(0,0,0,.08);
+}
+h2{font-size:18px;margin:0 0 8px}
+.info{color:#64748b;font-size:13px;line-height:1.5;margin-bottom:14px}
+.mode{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+button{
+  border:0;
+  border-radius:10px;
+  padding:13px;
+  font-size:15px;
+  font-weight:bold;
+  cursor:pointer;
+}
+#entryBtn{
+  background:#dcfce7;
+  color:#166534;
+  border:2px solid #86efac;
+}
+#entryBtn.active{background:#16a34a;color:#fff}
+#exitBtn{
+  background:#fee2e2;
+  color:#991b1b;
+  border:2px solid #fca5a5;
+}
+#exitBtn.active{background:#dc2626;color:#fff}
+#camera{
+  width:100%;
+  max-width:620px;
+  display:block;
+  margin:14px auto 8px;
+  border-radius:14px;
+  background:#000;
+  aspect-ratio:4/3;
+  object-fit:cover;
+}
+#cameraPlaceholder{
+  width:100%;
+  max-width:620px;
+  aspect-ratio:4/3;
+  margin:14px auto 8px;
+  border-radius:14px;
+  background:#111827;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:25px;
+  font-size:14px;
+}
+.status{
+  text-align:center;
+  font-size:14px;
+  font-weight:bold;
+  margin:10px 0;
+}
+.ok{color:#15803d}
+.err{color:#dc2626}
+.actions{display:flex;gap:10px;margin-top:10px}
+.actions button{flex:1}
+.primary{background:#2563eb;color:#fff}
+.secondary{background:#e2e8f0;color:#334155}
+.excel{background:#15803d;color:#fff}
+.danger{background:#dc2626;color:#fff}
+.date{text-align:center;font-weight:bold;margin:8px 0 14px}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{
+  padding:11px 9px;
+  border-bottom:1px solid #e2e8f0;
+  font-size:13px;
+  text-align:left;
+}
+th{background:#f8fafc}
+.empty{text-align:center;color:#64748b;padding:22px}
+.badge{
+  padding:5px 8px;
+  border-radius:20px;
+  font-size:11px;
+  font-weight:bold;
+}
+.open{background:#fef3c7;color:#92400e}
+.closed{background:#dcfce7;color:#166534}
+.notice{
+  margin-top:12px;
+  padding:11px;
+  border-radius:10px;
+  background:#eff6ff;
+  color:#1e40af;
+  font-size:12px;
+  line-height:1.5;
+}
+.toast{
+  position:fixed;
+  z-index:100;
+  left:50%;
+  bottom:20px;
+  max-width:90%;
+  transform:translate(-50%,130px);
+  transition:.25s;
+  background:#172033;
+  color:#fff;
+  border-radius:10px;
+  padding:13px 18px;
+  text-align:center;
+}
+.toast.show{transform:translate(-50%,0)}
+@media(max-width:600px){
+  .actions{flex-direction:column}
+  .mode{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>📷 Pointage Employés</h1>
+  <p>Scan du badge par caméra</p>
+</header>
+
+<main>
+
+<section class="card">
+  <h2>Pointage</h2>
+  <div class="info">
+    Choisissez <b>Entrée</b> ou <b>Sortie</b>, puis présentez le code-barres du badge devant la caméra.
+  </div>
+
+  <div class="mode">
+    <button id="entryBtn" class="active" type="button">🟢 ENTRÉE</button>
+    <button id="exitBtn" type="button">🔴 SORTIE</button>
+  </div>
+
+  <video id="camera" autoplay muted playsinline style="display:none"></video>
+  <div id="cameraPlaceholder">La caméra est arrêtée.<br>Appuyez sur « Démarrer la caméra ».</div>
+
+  <div id="status" class="status">
+    Prêt.
+  </div>
+
+  <div class="actions">
+    <button id="startBtn" class="primary" type="button">📷 Démarrer la caméra</button>
+    <button id="stopBtn" class="secondary" type="button">⏹ Arrêter</button>
+  </div>
+
+  <div class="notice">
+    <b>Chrome / Edge :</b> l'accès à la caméra nécessite généralement HTTPS
+    (ou localhost). Autorisez la caméra lorsque le navigateur le demande.
+    Le pointage est enregistré localement sur l'appareil.
+  </div>
+</section>
+
+<section class="card">
+  <h2>📋 Pointages du jour</h2>
+  <div id="today" class="date"></div>
+
+  <div class="actions">
+    <button id="excelBtn" class="excel" type="button">📥 Exporter vers Excel</button>
+    <button id="clearBtn" class="danger" type="button">🗑 Effacer les pointages</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Matricule</th>
+          <th>Entrée</th>
+          <th>Sortie</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody id="recordsBody"></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/*
+  VERSION SANS BIBLIOTHÈQUE EXTERNE.
+
+  Le scan utilise BarcodeDetector lorsque le navigateur le supporte.
+  Chrome/Edge Android récents peuvent fournir cette API.
+  Si elle n'est pas disponible, l'application indique clairement
+  que le moteur natif de lecture de codes-barres n'est pas disponible.
+*/
+
+const STORAGE_KEY="pointage_camera_offline_v1";
+
+let records=[];
+try{
+  records=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+  if(!Array.isArray(records)) records=[];
+}catch(e){
+  records=[];
+}
+
+let mode="entrée";
+let stream=null;
+let detector=null;
+let scanning=false;
+let lastCode="";
+let lastScanTime=0;
+
+const video=document.getElementById("camera");
+const placeholder=document.getElementById("cameraPlaceholder");
+const statusEl=document.getElementById("status");
+
+/* ---------------- DATE / HEURE ---------------- */
+
+function pad(n){
+  return String(n).padStart(2,"0");
+}
+
+function dateKey(){
+  const d=new Date();
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+}
+
+function timeKey(){
+  const d=new Date();
+  return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+}
+
+function displayDate(k){
+  const p=k.split("-");
+  return p.length===3 ? p[2]+"/"+p[1]+"/"+p[0] : k;
+}
+
+/* ---------------- STOCKAGE ---------------- */
+
+function save(){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(records));
+}
+
+/* ---------------- UI ---------------- */
+
+function setStatus(text,good=false,error=false){
+  statusEl.textContent=text;
+  statusEl.className="status "+(good?"ok":"")+(error?" err":"");
+}
+
+function showToast(text){
+  const t=document.getElementById("toast");
+  t.textContent=text;
+  t.classList.add("show");
+  clearTimeout(window.toastTimer);
+  window.toastTimer=setTimeout(()=>t.classList.remove("show"),3000);
+}
+
+function setMode(value){
+  mode=value;
+  document.getElementById("entryBtn").classList.toggle("active",value==="entrée");
+  document.getElementById("exitBtn").classList.toggle("active",value==="sortie");
+  setStatus("Mode : "+value.toUpperCase());
+}
+
+/* ---------------- CAMÉRA ---------------- */
+
+async function startCamera(){
+
+  if(scanning){
+    showToast("La caméra est déjà active.");
+    return;
+  }
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    setStatus("Ce navigateur ne permet pas l'accès à la caméra ici.",false,true);
+    showToast("Caméra non disponible.");
+    return;
+  }
+
+  if(!("BarcodeDetector" in window)){
+    setStatus(
+      "Ce navigateur ne fournit pas BarcodeDetector. Le scan natif n'est pas disponible dans cette configuration.",
+      false,true
+    );
+    showToast("Lecteur code-barres non disponible.");
+    return;
+  }
+
+  try{
+
+    const formats=[
+      "code_128",
+      "code_39",
+      "code_93",
+      "codabar",
+      "ean_13",
+      "ean_8",
+      "itf",
+      "upc_a",
+      "upc_e"
+    ];
+
+    try{
+      const supported=await BarcodeDetector.getSupportedFormats();
+      const wanted=formats.filter(x=>supported.includes(x));
+      detector=new BarcodeDetector({
+        formats:wanted.length?wanted:supported
+      });
+    }catch(e){
+      detector=new BarcodeDetector();
+    }
+
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:{ideal:"environment"},
+        width:{ideal:1280},
+        height:{ideal:720}
+      },
+      audio:false
+    });
+
+    video.srcObject=stream;
+    video.style.display="block";
+    placeholder.style.display="none";
+
+    await video.play();
+
+    scanning=true;
+    setStatus("Caméra active — présentez le badge devant la caméra.",true);
+
+    scanLoop();
+
+  }catch(error){
+
+    console.error(error);
+
+    stopCamera();
+
+    if(error.name==="NotAllowedError"){
+      setStatus(
+        "Accès caméra refusé. Autorisez la caméra dans Chrome/Edge.",
+        false,true
+      );
+      showToast("Permission caméra refusée.");
+    }else if(error.name==="NotFoundError"){
+      setStatus("Aucune caméra disponible.",false,true);
+      showToast("Caméra introuvable.");
+    }else{
+      setStatus(
+        "Impossible d'ouvrir la caméra. Vérifiez HTTPS et la permission caméra.",
+        false,true
+      );
+      showToast("Erreur d'ouverture de la caméra.");
+    }
+  }
+}
+
+function stopCamera(){
+
+  scanning=false;
+
+  if(stream){
+    stream.getTracks().forEach(track=>track.stop());
+  }
+
+  stream=null;
+  video.srcObject=null;
+  video.style.display="none";
+  placeholder.style.display="flex";
+
+  setStatus("Caméra arrêtée.");
+}
+
+async function scanLoop(){
+
+  if(!scanning || !detector)return;
+
+  try{
+
+    if(video.readyState>=2){
+
+      const codes=await detector.detect(video);
+
+      if(codes && codes.length){
+
+        for(const item of codes){
+
+          const value=(item.rawValue||"").trim();
+
+          if(value){
+            handleScan(value);
+            break;
+          }
+        }
+      }
+    }
+
+  }catch(error){
+    console.warn("Scan:",error);
+  }
+
+  if(scanning){
+    requestAnimationFrame(scanLoop);
+  }
+}
+
+/* ---------------- SCAN ---------------- */
+
+function handleScan(code){
+
+  const now=Date.now();
+
+  if(code===lastCode && now-lastScanTime<3000){
+    return;
+  }
+
+  lastCode=code;
+  lastScanTime=now;
+
+  registerPointage(code);
+}
+
+/* ---------------- POINTAGE ---------------- */
+
+function registerPointage(matricule){
+
+  const date=dateKey();
+  const heure=timeKey();
+
+  if(mode==="entrée"){
+
+    const open=records.find(r=>
+      r.date===date &&
+      r.matricule.toLowerCase()===matricule.toLowerCase() &&
+      r.entree &&
+      !r.sortie
+    );
+
+    if(open){
+      showToast("⚠️ Entrée déjà enregistrée à "+open.entree);
+      setStatus(
+        "Entrée déjà enregistrée pour "+matricule,
+        false,true
+      );
+      return;
+    }
+
+    records.push({
+      id:Date.now(),
+      date:date,
+      matricule:matricule,
+      entree:heure,
+      sortie:""
+    });
+
+    save();
+    render();
+
+    showToast("🟢 Entrée : "+matricule+" — "+heure);
+    setStatus(
+      "Entrée enregistrée : "+matricule+" — "+heure,
+      true
+    );
+
+  }else{
+
+    const open=[...records].reverse().find(r=>
+      r.date===date &&
+      r.matricule.toLowerCase()===matricule.toLowerCase() &&
+      r.entree &&
+      !r.sortie
+    );
+
+    if(!open){
+      showToast("⚠️ Aucune entrée ouverte pour "+matricule);
+      setStatus(
+        "Aucune entrée ouverte pour "+matricule,
+        false,true
+      );
+      return;
+    }
+
+    open.sortie=heure;
+
+    save();
+    render();
+
+    showToast("🔴 Sortie : "+matricule+" — "+heure);
+    setStatus(
+      "Sortie enregistrée : "+matricule+" — "+heure,
+      true
+    );
+  }
+}
+
+/* ---------------- TABLEAU ---------------- */
+
+function escapeHtml(value){
+  return String(value??"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+function render(){
+
+  document.getElementById("today").textContent=
+    "Date : "+displayDate(dateKey());
+
+  const body=document.getElementById("recordsBody");
+
+  const rows=records
+    .filter(r=>r.date===dateKey())
+    .sort((a,b)=>b.id-a.id);
+
+  if(!rows.length){
+    body.innerHTML=
+      '<tr><td colspan="5" class="empty">Aucun pointage aujourd’hui.</td></tr>';
+    return;
+  }
+
+  body.innerHTML=rows.map(r=>{
+
+    const badge=r.sortie
+      ? '<span class="badge closed">Terminé</span>'
+      : '<span class="badge open">En cours</span>';
+
+    return `
+      <tr>
+        <td>${escapeHtml(displayDate(r.date))}</td>
+        <td><b>${escapeHtml(r.matricule)}</b></td>
+        <td>${escapeHtml(r.entree)}</td>
+        <td>${escapeHtml(r.sortie||"")}</td>
+        <td>${badge}</td>
+      </tr>
+    `;
+
+  }).join("");
+}
+
+/* ---------------- EXCEL COMPATIBLE ---------------- */
+
+function excelXmlEscape(value){
+  return String(value??"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&apos;");
+}
+
+function makeExcelXml(rows){
+
+  const headers=[
+    "Date",
+    "Matricule",
+    "Heure d'entrée",
+    "Heure de sortie",
+    "Statut"
+  ];
+
+  const headerCells=headers.map(h=>
+    `<Cell ss:StyleID="Header"><Data ss:Type="String">${excelXmlEscape(h)}</Data></Cell>`
+  ).join("");
+
+  const dataRows=rows.map(r=>{
+
+    const status=r.sortie?"Terminé":"En cours";
+
+    const values=[
+      displayDate(r.date),
+      r.matricule,
+      r.entree||"",
+      r.sortie||"",
+      status
+    ];
+
+    return "<Row>"+
+      values.map(v=>
+        `<Cell><Data ss:Type="String">${excelXmlEscape(v)}</Data></Cell>`
+      ).join("")+
+      "</Row>";
+
+  }).join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="Header">
+<Font ss:Bold="1"/>
+<Interior ss:Color="#D9EAF7" ss:Pattern="Solid"/>
+</Style>
+</Styles>
+<Worksheet ss:Name="Pointage">
+<Table>
+<Column ss:Width="90"/>
+<Column ss:Width="150"/>
+<Column ss:Width="110"/>
+<Column ss:Width="110"/>
+<Column ss:Width="90"/>
+<Row ss:AutoFitHeight="0">${headerCells}</Row>
+${dataRows}
+</Table>
+</Worksheet>
+</Workbook>`;
+}
+
+function exportExcel(){
+
+  if(!records.length){
+    showToast("Aucun pointage à exporter.");
+    return;
+  }
+
+  /*
+    Le fichier est un classeur SpreadsheetML lisible par Excel.
+    Il ne nécessite aucune bibliothèque ni connexion Internet.
+  */
+  const rows=records
+    .slice()
+    .sort((a,b)=>(b.date+b.entree).localeCompare(a.date+a.entree));
+
+  const xml=makeExcelXml(rows);
+
+  const blob=new Blob(
+    [xml],
+    {type:"application/vnd.ms-excel;charset=utf-8"}
+  );
+
+  const url=URL.createObjectURL(blob);
+
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="Pointage_Employes_"+dateKey()+".xls";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+  showToast("✅ Fichier Excel créé.");
+}
+
+/* ---------------- EFFACER ---------------- */
+
+function clearRecords(){
+
+  if(!records.length){
+    showToast("Aucun pointage à effacer.");
+    return;
+  }
+
+  if(!confirm(
+    "Voulez-vous supprimer tous les pointages enregistrés sur ce téléphone ?"
+  )){
+    return;
+  }
+
+  records=[];
+  save();
+  render();
+
+  showToast("Tous les pointages ont été supprimés.");
+}
+
+/* ---------------- BOUTONS ---------------- */
+
+document.getElementById("entryBtn").addEventListener(
+  "click",()=>setMode("entrée")
+);
+
+document.getElementById("exitBtn").addEventListener(
+  "click",()=>setMode("sortie")
+);
+
+document.getElementById("startBtn").addEventListener(
+  "click",startCamera
+);
+
+document.getElementById("stopBtn").addEventListener(
+  "click",stopCamera
+);
+
+document.getElementById("excelBtn").addEventListener(
+  "click",exportExcel
+);
+
+document.getElementById("clearBtn").addEventListener(
+  "click",clearRecords
+);
+
+window.addEventListener("beforeunload",stopCamera);
+
+render();
+
+/*
+  Vérification immédiate du support du navigateur.
+*/
+if(!("BarcodeDetector" in window)){
+  setStatus(
+    "Navigateur compatible caméra, mais BarcodeDetector n'est pas disponible pour le scan natif.",
+    false,true
+  );
+}
+</script>
+
+</body>
+</html>
