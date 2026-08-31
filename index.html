@@ -144,8 +144,7 @@ th{background:#f8fafc}
   <div id="status" class="status">Prêt</div>
 
   <div class="actions">
-    <button id="startBtn" class="primary" type="button">📷 Démarrer la caméra</button>
-    <button id="stopBtn" class="secondary" type="button">⏹ Arrêter</button>
+    <button id="startBtn" class="primary" type="button">📷 Scanner</button>
   </div>
 </section>
 
@@ -459,7 +458,11 @@ function handleScan(code){
   lastCode=code;
   lastScanTime=now;
 
-  registerPointage(code);
+  scanFeedback();
+
+  openConfirm("Confirmer le scan du matricule « "+code+" » ?",()=>{
+    registerPointage(code);
+  });
 }
 
 /* ---------------- CALCUL DU TEMPS ---------------- */
@@ -527,7 +530,6 @@ function registerPointage(matricule){
     save();
     render();
 
-    scanFeedback();
     showToast("Entrée enregistrée");
     setStatus("Entrée • "+matricule+" • "+heure,true);
 
@@ -538,7 +540,6 @@ function registerPointage(matricule){
     save();
     render();
 
-    scanFeedback();
     showToast("Sortie enregistrée");
     setStatus("Sortie • "+matricule+" • "+heure,true);
   }
@@ -800,10 +801,6 @@ function confirmClearRecords(){
 
 document.getElementById("startBtn").addEventListener(
   "click",startCamera
-);
-
-document.getElementById("stopBtn").addEventListener(
-  "click",stopCamera
 );
 
 document.getElementById("excelBtn").addEventListener(
