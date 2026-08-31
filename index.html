@@ -460,7 +460,12 @@ function handleScan(code){
 
   scanFeedback();
 
+  // Arrêter immédiatement le scan avant d'afficher la confirmation
+  stopCamera();
+
   openConfirm("Confirmer le scan du matricule « "+code+" » ?",()=>{
+    // S'assurer que le scan est arrêté après la confirmation
+    stopCamera();
     registerPointage(code);
   });
 }
