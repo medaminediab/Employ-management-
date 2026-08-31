@@ -181,7 +181,7 @@ th{background:#f8fafc}
 
 <div id="confirmModal">
   <div class="confirm-box">
-    <h3>Supprimer tous les pointages ?</h3>
+    <h3 id="confirmMessage">Confirmer ?</h3>
     <div class="confirm-actions">
       <button id="confirmNo" class="confirm-no" type="button">Non</button>
       <button id="confirmYes" class="confirm-yes" type="button">Oui</button>
@@ -601,6 +601,14 @@ function render(){
 }
 
 /* ---------------- MODIFIER / SUPPRIMER UN POINTAGE ---------------- */
+let pendingConfirmAction=null;
+
+function openConfirm(message, action){
+  document.getElementById("confirmMessage").textContent=message;
+  pendingConfirmAction=action;
+  document.getElementById("confirmModal").classList.add("show");
+}
+
 function editRecord(id){
   const r=records.find(x=>x.id===id); if(!r)return;
   const entree=prompt("Heure d'entrée (HH:MM:SS)",r.entree||""); if(entree===null)return;
@@ -608,12 +616,24 @@ function editRecord(id){
   const re=/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$/;
   if(entree&&!re.test(entree)){showToast("Heure d'entrée invalide.");return;}
   if(sortie&&!re.test(sortie)){showToast("Heure de sortie invalide.");return;}
-  r.entree=entree;r.sortie=sortie;save();render();showToast("Pointage modifié.");
+
+  openConfirm("Confirmer la modification du pointage ?",()=>{
+    r.entree=entree;
+    r.sortie=sortie;
+    save();
+    render();
+    showToast("Pointage modifié.");
+  });
 }
+
 function deleteRecord(id){
   if(!records.some(r=>r.id===id))return;
-  if(!confirm("Supprimer ce pointage ?"))return;
-  records=records.filter(r=>r.id!==id);save();render();showToast("Pointage supprimé.");
+  openConfirm("Confirmer la suppression du pointage ?",()=>{
+    records=records.filter(r=>r.id!==id);
+    save();
+    render();
+    showToast("Pointage supprimé.");
+  });
 }
 
 /* ---------------- EXCEL COMPATIBLE ---------------- */
@@ -752,19 +772,28 @@ function clearRecords(){
     return;
   }
 
-  document.getElementById("confirmModal").classList.add("show");
+  openConfirm("Supprimer tous les pointages ?",()=>{
+    records=[];
+    save();
+    render();
+    showToast("Tous les pointages ont été supprimés.");
+  });
 }
 
 function closeConfirm(){
   document.getElementById("confirmModal").classList.remove("show");
+  pendingConfirmAction=null;
 }
 
 function confirmClearRecords(){
-  records=[];
-  save();
-  render();
-  closeConfirm();
-  showToast("Tous les pointages ont été supprimés.");
+  if(typeof pendingConfirmAction==="function"){
+    const action=pendingConfirmAction;
+    pendingConfirmAction=null;
+    document.getElementById("confirmModal").classList.remove("show");
+    action();
+  }else{
+    closeConfirm();
+  }
 }
 
 /* ---------------- BOUTONS ---------------- */
