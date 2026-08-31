@@ -460,12 +460,10 @@ function handleScan(code){
 
   scanFeedback();
 
-  // Arrêter immédiatement le scan avant d'afficher la confirmation
+  // Arrêter le scan au moment d'afficher la confirmation
   stopCamera();
 
   openConfirm("Confirmer le scan du matricule « "+code+" » ?",()=>{
-    // S'assurer que le scan est arrêté après la confirmation
-    stopCamera();
     registerPointage(code);
   });
 }
@@ -619,7 +617,7 @@ function editRecord(id){
   const r=records.find(x=>x.id===id); if(!r)return;
   const entree=prompt("Heure d'entrée (HH:MM:SS)",r.entree||""); if(entree===null)return;
   const sortie=prompt("Heure de sortie (HH:MM:SS)",r.sortie||""); if(sortie===null)return;
-  const re=/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$/;
+  const re=/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
   if(entree&&!re.test(entree)){showToast("Heure d'entrée invalide.");return;}
   if(sortie&&!re.test(sortie)){showToast("Heure de sortie invalide.");return;}
 
