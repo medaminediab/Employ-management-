@@ -31,12 +31,6 @@ main{width:min(900px,100%);margin:auto;padding:14px}
   box-shadow:0 3px 15px rgba(0,0,0,.08);
 }
 h2{font-size:18px;margin:0 0 8px}
-.info{color:#64748b;font-size:13px;line-height:1.5;margin-bottom:14px}
-.mode{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-}
 button{
   border:0;
   border-radius:10px;
@@ -45,18 +39,6 @@ button{
   font-weight:bold;
   cursor:pointer;
 }
-#entryBtn{
-  background:#dcfce7;
-  color:#166534;
-  border:2px solid #86efac;
-}
-#entryBtn.active{background:#16a34a;color:#fff}
-#exitBtn{
-  background:#fee2e2;
-  color:#991b1b;
-  border:2px solid #fca5a5;
-}
-#exitBtn.active{background:#dc2626;color:#fff}
 #camera{
   width:100%;
   max-width:620px;
@@ -115,15 +97,6 @@ th{background:#f8fafc}
 }
 .open{background:#fef3c7;color:#92400e}
 .closed{background:#dcfce7;color:#166534}
-.notice{
-  margin-top:12px;
-  padding:11px;
-  border-radius:10px;
-  background:#eff6ff;
-  color:#1e40af;
-  font-size:12px;
-  line-height:1.5;
-}
 .toast{
   position:fixed;
   z-index:100;
@@ -139,10 +112,17 @@ th{background:#f8fafc}
   text-align:center;
 }
 .toast.show{transform:translate(-50%,0)}
+#confirmModal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
+#confirmModal.show{display:flex}
+.confirm-box{width:min(360px,100%);background:#fff;border-radius:15px;padding:20px;box-shadow:0 10px 35px rgba(0,0,0,.2);text-align:center}
+.confirm-box h3{margin:0 0 18px;font-size:18px}
+.confirm-actions{display:flex;gap:10px}
+.confirm-actions button{flex:1}
+.confirm-yes{background:#dc2626;color:#fff}
+.confirm-no{background:#e2e8f0;color:#334155}
 @media(max-width:600px){
   .actions{flex-direction:column}
-  .mode{grid-template-columns:1fr}
-}
+  }
 </style>
 </head>
 
@@ -150,38 +130,21 @@ th{background:#f8fafc}
 
 <header>
   <h1>📷 Pointage Employés</h1>
-  <p>Scan du badge par caméra</p>
+  
 </header>
 
 <main>
 
 <section class="card">
   <h2>Pointage</h2>
-  <div class="info">
-    Choisissez <b>Entrée</b> ou <b>Sortie</b>, puis présentez le code-barres du badge devant la caméra.
-  </div>
-
-  <div class="mode">
-    <button id="entryBtn" class="active" type="button">🟢 ENTRÉE</button>
-    <button id="exitBtn" type="button">🔴 SORTIE</button>
-  </div>
-
-  <video id="camera" autoplay muted playsinline style="display:none"></video>
+<video id="camera" autoplay muted playsinline style="display:none"></video>
   <div id="cameraPlaceholder">La caméra est arrêtée.<br>Appuyez sur « Démarrer la caméra ».</div>
 
-  <div id="status" class="status">
-    Prêt.
-  </div>
+  <div id="status" class="status">Prêt</div>
 
   <div class="actions">
     <button id="startBtn" class="primary" type="button">📷 Démarrer la caméra</button>
     <button id="stopBtn" class="secondary" type="button">⏹ Arrêter</button>
-  </div>
-
-  <div class="notice">
-    <b>Chrome / Edge :</b> l'accès à la caméra nécessite généralement HTTPS
-    (ou localhost). Autorisez la caméra lorsque le navigateur le demande.
-    Le pointage est enregistré localement sur l'appareil.
   </div>
 </section>
 
@@ -202,6 +165,8 @@ th{background:#f8fafc}
           <th>Matricule</th>
           <th>Entrée</th>
           <th>Sortie</th>
+          <th>Durée travaillée</th>
+          <th>Heures supplémentaires</th>
           <th>Statut</th>
         </tr>
       </thead>
@@ -211,6 +176,16 @@ th{background:#f8fafc}
 </section>
 
 </main>
+
+<div id="confirmModal">
+  <div class="confirm-box">
+    <h3>Supprimer tous les pointages ?</h3>
+    <div class="confirm-actions">
+      <button id="confirmNo" class="confirm-no" type="button">Non</button>
+      <button id="confirmYes" class="confirm-yes" type="button">Oui</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="toast"></div>
 
@@ -234,7 +209,6 @@ try{
   records=[];
 }
 
-let mode="entrée";
 let stream=null;
 let detector=null;
 let scanning=false;
@@ -287,12 +261,6 @@ function showToast(text){
   window.toastTimer=setTimeout(()=>t.classList.remove("show"),3000);
 }
 
-function setMode(value){
-  mode=value;
-  document.getElementById("entryBtn").classList.toggle("active",value==="entrée");
-  document.getElementById("exitBtn").classList.toggle("active",value==="sortie");
-  setStatus("Mode : "+value.toUpperCase());
-}
 
 /* ---------------- CAMÉRA ---------------- */
 
@@ -452,30 +420,59 @@ function handleScan(code){
   registerPointage(code);
 }
 
-/* ---------------- POINTAGE ---------------- */
+/* ---------------- CALCUL DU TEMPS ---------------- */
+
+function minutesFromTime(t){
+  if(!t) return null;
+  const p=t.split(":").map(Number);
+  return p[0]*60+p[1]+(p[2]||0)/60;
+}
+
+function workedMinutes(entree, sortie){
+  if(!entree || !sortie) return 0;
+  let start=minutesFromTime(entree);
+  let end=minutesFromTime(sortie);
+  if(end < start) end += 24*60;
+
+  // Pause fixe 12:00-13:00 : on retire uniquement la partie réellement
+  // comprise dans l'intervalle travaillé.
+  const pauseStart=12*60;
+  const pauseEnd=13*60;
+  const overlap=Math.max(0, Math.min(end,pauseEnd)-Math.max(start,pauseStart));
+  return Math.max(0,end-start-overlap);
+}
+
+function formatDuration(mins){
+  if(mins===null || mins===undefined || isNaN(mins)) return "";
+  mins=Math.max(0,Math.round(mins));
+  return Math.floor(mins/60)+"h "+String(mins%60).padStart(2,"0")+"min";
+}
+
+function overtimeMinutes(entree, sortie){
+  if(!entree || !sortie) return 0;
+  const end=minutesFromTime(sortie);
+  // Les heures supplémentaires commencent après 17:00.
+  return Math.max(0,end-17*60);
+}
+
+/* ---------------- POINTAGE AUTOMATIQUE ---------------- */
 
 function registerPointage(matricule){
 
   const date=dateKey();
   const heure=timeKey();
 
-  if(mode==="entrée"){
+  // Le système détermine automatiquement l'opération :
+  // aucune entrée ouverte = ENTRÉE
+  // entrée ouverte = SORTIE
+  const open=[...records].reverse().find(r=>
+    r.date===date &&
+    r.matricule.toLowerCase()===matricule.toLowerCase() &&
+    r.entree &&
+    !r.sortie
+  );
 
-    const open=records.find(r=>
-      r.date===date &&
-      r.matricule.toLowerCase()===matricule.toLowerCase() &&
-      r.entree &&
-      !r.sortie
-    );
-
-    if(open){
-      showToast("⚠️ Entrée déjà enregistrée à "+open.entree);
-      setStatus(
-        "Entrée déjà enregistrée pour "+matricule,
-        false,true
-      );
-      return;
-    }
+  if(!open){
 
     records.push({
       id:Date.now(),
@@ -488,44 +485,23 @@ function registerPointage(matricule){
     save();
     render();
 
-    showToast("🟢 Entrée : "+matricule+" — "+heure);
-    setStatus(
-      "Entrée enregistrée : "+matricule+" — "+heure,
-      true
-    );
+    showToast("Entrée enregistrée");
+    setStatus("Entrée • "+matricule+" • "+heure,true);
 
   }else{
-
-    const open=[...records].reverse().find(r=>
-      r.date===date &&
-      r.matricule.toLowerCase()===matricule.toLowerCase() &&
-      r.entree &&
-      !r.sortie
-    );
-
-    if(!open){
-      showToast("⚠️ Aucune entrée ouverte pour "+matricule);
-      setStatus(
-        "Aucune entrée ouverte pour "+matricule,
-        false,true
-      );
-      return;
-    }
 
     open.sortie=heure;
 
     save();
     render();
 
-    showToast("🔴 Sortie : "+matricule+" — "+heure);
-    setStatus(
-      "Sortie enregistrée : "+matricule+" — "+heure,
-      true
-    );
+    showToast("Sortie enregistrée");
+    setStatus("Sortie • "+matricule+" • "+heure,true);
   }
 }
 
 /* ---------------- TABLEAU ---------------- */
+
 
 function escapeHtml(value){
   return String(value??"")
@@ -549,12 +525,14 @@ function render(){
 
   if(!rows.length){
     body.innerHTML=
-      '<tr><td colspan="5" class="empty">Aucun pointage aujourd’hui.</td></tr>';
+      '<tr><td colspan="7" class="empty">Aucun pointage aujourd’hui.</td></tr>';
     return;
   }
 
   body.innerHTML=rows.map(r=>{
 
+    const worked=r.sortie ? workedMinutes(r.entree,r.sortie) : null;
+    const overtime=r.sortie ? overtimeMinutes(r.entree,r.sortie) : null;
     const badge=r.sortie
       ? '<span class="badge closed">Terminé</span>'
       : '<span class="badge open">En cours</span>';
@@ -565,6 +543,8 @@ function render(){
         <td><b>${escapeHtml(r.matricule)}</b></td>
         <td>${escapeHtml(r.entree)}</td>
         <td>${escapeHtml(r.sortie||"")}</td>
+        <td>${escapeHtml(formatDuration(worked))}</td>
+        <td>${escapeHtml(formatDuration(overtime))}</td>
         <td>${badge}</td>
       </tr>
     `;
@@ -590,6 +570,8 @@ function makeExcelXml(rows){
     "Matricule",
     "Heure d'entrée",
     "Heure de sortie",
+    "Durée travaillée",
+    "Heures supplémentaires",
     "Statut"
   ];
 
@@ -606,6 +588,8 @@ function makeExcelXml(rows){
       r.matricule,
       r.entree||"",
       r.sortie||"",
+      formatDuration(r.sortie ? workedMinutes(r.entree,r.sortie) : null),
+      formatDuration(r.sortie ? overtimeMinutes(r.entree,r.sortie) : null),
       status
     ];
 
@@ -688,28 +672,22 @@ function clearRecords(){
     return;
   }
 
-  if(!confirm(
-    "Voulez-vous supprimer tous les pointages enregistrés sur ce téléphone ?"
-  )){
-    return;
-  }
+  document.getElementById("confirmModal").classList.add("show");
+}
 
+function closeConfirm(){
+  document.getElementById("confirmModal").classList.remove("show");
+}
+
+function confirmClearRecords(){
   records=[];
   save();
   render();
-
+  closeConfirm();
   showToast("Tous les pointages ont été supprimés.");
 }
 
 /* ---------------- BOUTONS ---------------- */
-
-document.getElementById("entryBtn").addEventListener(
-  "click",()=>setMode("entrée")
-);
-
-document.getElementById("exitBtn").addEventListener(
-  "click",()=>setMode("sortie")
-);
 
 document.getElementById("startBtn").addEventListener(
   "click",startCamera
@@ -726,6 +704,12 @@ document.getElementById("excelBtn").addEventListener(
 document.getElementById("clearBtn").addEventListener(
   "click",clearRecords
 );
+
+document.getElementById("confirmNo").addEventListener("click",closeConfirm);
+document.getElementById("confirmYes").addEventListener("click",confirmClearRecords);
+document.getElementById("confirmModal").addEventListener("click",e=>{
+  if(e.target.id==="confirmModal") closeConfirm();
+});
 
 window.addEventListener("beforeunload",stopCamera);
 
