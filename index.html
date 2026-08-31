@@ -97,6 +97,7 @@ th{background:#f8fafc}
 }
 .open{background:#fef3c7;color:#92400e}
 .closed{background:#dcfce7;color:#166534}
+.record-actions{display:flex;gap:6px;white-space:nowrap}.icon-btn{border:0;background:transparent;padding:5px;font-size:17px;cursor:pointer;border-radius:7px;line-height:1}.icon-btn:hover{background:#f1f5f9}.edit-icon{color:#2563eb}.delete-icon{color:#dc2626}
 .toast{
   position:fixed;
   z-index:100;
@@ -168,6 +169,7 @@ th{background:#f8fafc}
           <th>Durée travaillée</th>
           <th>Heures supplémentaires</th>
           <th>Statut</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="recordsBody"></tbody>
@@ -567,7 +569,7 @@ function render(){
 
   if(!rows.length){
     body.innerHTML=
-      '<tr><td colspan="7" class="empty">Aucun pointage aujourd’hui.</td></tr>';
+      '<tr><td colspan="8" class="empty">Aucun pointage aujourd’hui.</td></tr>';
     return;
   }
 
@@ -588,10 +590,30 @@ function render(){
         <td>${escapeHtml(formatDuration(worked))}</td>
         <td>${escapeHtml(formatDuration(overtime))}</td>
         <td>${badge}</td>
+        <td><div class="record-actions">
+          <button class="icon-btn edit-icon" type="button" title="Modifier" aria-label="Modifier" onclick="editRecord(${r.id})">✏️</button>
+          <button class="icon-btn delete-icon" type="button" title="Supprimer" aria-label="Supprimer" onclick="deleteRecord(${r.id})">🗑️</button>
+        </div></td>
       </tr>
     `;
 
   }).join("");
+}
+
+/* ---------------- MODIFIER / SUPPRIMER UN POINTAGE ---------------- */
+function editRecord(id){
+  const r=records.find(x=>x.id===id); if(!r)return;
+  const entree=prompt("Heure d'entrée (HH:MM:SS)",r.entree||""); if(entree===null)return;
+  const sortie=prompt("Heure de sortie (HH:MM:SS)",r.sortie||""); if(sortie===null)return;
+  const re=/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$/;
+  if(entree&&!re.test(entree)){showToast("Heure d'entrée invalide.");return;}
+  if(sortie&&!re.test(sortie)){showToast("Heure de sortie invalide.");return;}
+  r.entree=entree;r.sortie=sortie;save();render();showToast("Pointage modifié.");
+}
+function deleteRecord(id){
+  if(!records.some(r=>r.id===id))return;
+  if(!confirm("Supprimer ce pointage ?"))return;
+  records=records.filter(r=>r.id!==id);save();render();showToast("Pointage supprimé.");
 }
 
 /* ---------------- EXCEL COMPATIBLE ---------------- */
