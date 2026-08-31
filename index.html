@@ -669,41 +669,57 @@ ${dataRows}
 </Workbook>`;
 }
 
-function exportExcel(){
+/* ---------------- GOOGLE SHEETS ---------------- */
+
+const GOOGLE_SHEETS_CONFIG = {
+  // Après déploiement du Google Apps Script, collez ici l'URL
+  // se terminant par /exec.
+  WEB_APP_URL: "COLLER_ICI_URL_APPS_SCRIPT"
+};
+
+async function exportToGoogleSheets(){
 
   if(!records.length){
     showToast("Aucun pointage à exporter.");
     return;
   }
 
-  /*
-    Le fichier est un classeur SpreadsheetML lisible par Excel.
-    Il ne nécessite aucune bibliothèque ni connexion Internet.
-  */
+  if(!GOOGLE_SHEETS_CONFIG.WEB_APP_URL ||
+     GOOGLE_SHEETS_CONFIG.WEB_APP_URL==="COLLER_ICI_URL_APPS_SCRIPT"){
+    showToast("Connexion Google Sheets non configurée.");
+    return;
+  }
+
   const rows=records
     .slice()
     .sort((a,b)=>(b.date+b.entree).localeCompare(a.date+a.entree));
 
-  const xml=makeExcelXml(rows);
+  const payload={
+    action:"appendAttendance",
+    spreadsheetId:"18n-tO34vWnZdFt6Msm61FTtbpBMa4M3qUUTVgDfQU00",
+    sheetName:"Pointage",
+    records:rows
+  };
 
-  const blob=new Blob(
-    [xml],
-    {type:"application/vnd.ms-excel;charset=utf-8"}
-  );
+  try{
+    await fetch(GOOGLE_SHEETS_CONFIG.WEB_APP_URL,{
+      method:"POST",
+      mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(payload)
+    });
 
-  const url=URL.createObjectURL(blob);
-
-  const a=document.createElement("a");
-  a.href=url;
-  a.download="Pointage_Employes_"+dateKey()+".xls";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-
-  showToast("✅ Fichier Excel créé.");
+    showToast("✅ Pointages envoyés à Google Sheets.");
+  }catch(error){
+    console.error(error);
+    showToast("❌ Envoi Google Sheets impossible.");
+  }
 }
+
+function exportExcel(){
+  exportToGoogleSheets();
+}
+
 
 /* ---------------- EFFACER ---------------- */
 
