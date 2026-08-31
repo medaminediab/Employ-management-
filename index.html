@@ -214,6 +214,7 @@ let detector=null;
 let scanning=false;
 let lastCode="";
 let lastScanTime=0;
+let audioContext=null;
 
 const video=document.getElementById("camera");
 const placeholder=document.getElementById("cameraPlaceholder");
@@ -404,6 +405,45 @@ async function scanLoop(){
   }
 }
 
+/* ---------------- FEEDBACK SCAN ---------------- */
+
+function scanFeedback(){
+  // Bip sonore
+  try{
+    if(!audioContext){
+      audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    }
+    if(audioContext.state==="suspended"){
+      audioContext.resume();
+    }
+
+    const oscillator=audioContext.createOscillator();
+    const gain=audioContext.createGain();
+
+    oscillator.type="sine";
+    oscillator.frequency.value=880;
+    gain.gain.setValueAtTime(0.001,audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18,audioContext.currentTime+0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001,audioContext.currentTime+0.12);
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime+0.13);
+  }catch(e){
+    console.warn("Bip:",e);
+  }
+
+  // Vibration courte sur les appareils compatibles
+  try{
+    if("vibrate" in navigator){
+      navigator.vibrate(180);
+    }
+  }catch(e){
+    console.warn("Vibration:",e);
+  }
+}
+
 /* ---------------- SCAN ---------------- */
 
 function handleScan(code){
@@ -485,6 +525,7 @@ function registerPointage(matricule){
     save();
     render();
 
+    scanFeedback();
     showToast("Entrée enregistrée");
     setStatus("Entrée • "+matricule+" • "+heure,true);
 
@@ -495,6 +536,7 @@ function registerPointage(matricule){
     save();
     render();
 
+    scanFeedback();
     showToast("Sortie enregistrée");
     setStatus("Sortie • "+matricule+" • "+heure,true);
   }
