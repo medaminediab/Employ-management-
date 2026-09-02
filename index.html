@@ -2677,6 +2677,13 @@
                 <button class="btn btn-secondary" onclick="openEmployeeBadgesPage()">
                     <i class="fas fa-id-badge"></i> Badges A4
                 </button>
+                <button class="btn btn-secondary" onclick="exportEmployeesExcel()">
+                    <i class="fas fa-download"></i> Exporter Excel
+                </button>
+                <button class="btn btn-secondary" onclick="document.getElementById('importEmployeesExcelInput').click()">
+                    <i class="fas fa-upload"></i> Importer Excel
+                </button>
+                <input type="file" id="importEmployeesExcelInput" accept=".xlsx,.xls" style="display:none" onchange="importEmployeesExcel(event)">
                 <button class="btn btn-primary" onclick="openAddEmployeeModal()">
                     <i class="fas fa-plus"></i> Ajouter un employe
                 </button>
@@ -4465,6 +4472,120 @@ function openEmployeeBadgeById(empId) {
     showEmployeeBadge(emp).catch(() => {
         showToast("Impossible d’afficher le badge de l'employe", 'error');
     });
+}
+
+function exportEmployeesExcel() {
+    if (!employees.length) {
+        showToast('Aucun employe a exporter.', 'warning');
+        return;
+    }
+
+    const rows = [
+        ['Nom', 'Matricule', 'CIN', 'Departement', 'Poste', 'Telephone', 'Type de contrat'],
+        ...employees.map(emp => [
+            emp.nom || '',
+            emp.matricule || '',
+            emp.cin || '',
+            emp.dept || '',
+            emp.poste || '',
+            emp.tel || '',
+            emp.contrat || ''
+        ])
+    ];
+
+    createSimpleXlsx(rows, 'employes_' + todayStr() + '.xlsx');
+    showToast('Liste des employes exportee vers Excel');
+}
+
+function importEmployeesExcel(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (typeof XLSX === 'undefined') {
+        showToast('Le module Excel est indisponible.', 'error');
+        event.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const workbook = XLSX.read(e.target.result, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+            if (!rows.length) {
+                showToast('Le fichier Excel ne contient aucun employe.', 'warning');
+                return;
+            }
+
+            const normalize = value => String(value ?? '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase().trim();
+            const getValue = (row, names) => {
+                const keys = Object.keys(row);
+                for (const name of names) {
+                    const target = normalize(name);
+                    const key = keys.find(k => normalize(k) === target);
+                    if (key !== undefined && row[key] !== '') return String(row[key]).trim();
+                }
+                return '';
+            };
+
+            let added = 0;
+            let skipped = 0;
+
+            rows.forEach(row => {
+                const nom = getValue(row, ['Nom', 'Employe', 'Employé', 'Nom complet']);
+                const matricule = getValue(row, ['Matricule', 'Badge']).toUpperCase();
+                if (!nom || !matricule) {
+                    skipped++;
+                    return;
+                }
+
+                const duplicate = employees.some(emp =>
+                    String(emp.matricule || '').toUpperCase() === matricule
+                );
+                if (duplicate) {
+                    skipped++;
+                    return;
+                }
+
+                employees.push({
+                    id: generateId(),
+                    nom,
+                    matricule,
+                    cin: getValue(row, ['CIN', 'CIN / Identite', 'Identite']),
+                    dept: getValue(row, ['Departement', 'Département', 'Dept']),
+                    poste: getValue(row, ['Poste', 'Fonction']),
+                    tel: getValue(row, ['Telephone', 'Téléphone', 'Tel', 'Tél']),
+                    dateNaissance: getValue(row, ['Date de naissance', 'Date naissance']),
+                    dateEmbauche: getValue(row, ['Date d embauche', 'Date embauche']),
+                    contrat: getValue(row, ['Type de contrat', 'Contrat']),
+                    photo: ''
+                });
+                added++;
+            });
+
+            if (added > 0) {
+                saveData();
+                renderEmployees();
+                updateActiveCount();
+            }
+
+            showToast(added + ' employe(s) importe(s)' + (skipped ? ' — ' + skipped + ' ignore(s).' : '.'));
+        } catch (error) {
+            console.error(error);
+            showToast('Impossible de lire le fichier Excel.', 'error');
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.onerror = function() {
+        showToast('Impossible de lire le fichier Excel.', 'error');
+        event.target.value = '';
+    };
+    reader.readAsArrayBuffer(file);
 }
 
 function renderEmployees() {
