@@ -2627,10 +2627,6 @@
         <div class="pointage-mode-content" id="pointageMode-intervalles">
             <div class="interval-panel">
                 <h3><i class="fas fa-arrows-alt-h"></i> Pointage par intervalles de matricules</h3>
-                <p class="interval-desc">
-                    Pointez un groupe d'employes en definissant un intervalle de matricules.
-                    Tous les employes dont le matricule se trouve entre les deux bornes seront traites en une seule operation.
-                </p>
 
                 <div class="interval-row">
                     <div class="form-group">
@@ -2675,7 +2671,7 @@
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-secondary" onclick="openEmployeeBadgesPage()">
-                    <i class="fas fa-id-badge"></i> Badges A4
+                    <i class="fas fa-id-badge"></i> Badges
                 </button>
                 <button class="btn btn-secondary" onclick="exportEmployeesExcel()">
                     <i class="fas fa-download"></i> Exporter Excel
@@ -2850,7 +2846,7 @@
                         </div>
                     </div>
                     <p style="font-size:11px;color:var(--fg-muted);margin-top:8px;line-height:1.5;">
-                        Le nom et le logo seront utilisés dans l'écran de connexion, le menu et l'en-tête mobile. Le nom de l'entreprise (Auxibeton) reste indépendant.
+                        
                     </p>
                 </div>
             </div>
@@ -2902,7 +2898,7 @@
                     </div>
                 </div>
                 <p style="font-size:11px;color:var(--fg-muted);margin-top:10px;line-height:1.5;">
-                    Les identifiants sont enregistrés localement dans le navigateur, comme les autres paramètres de cette application.
+                    
                 </p>
             </div>
 
@@ -2928,7 +2924,7 @@
                     <label class="access-permission"><input type="checkbox" id="accessParametres" onchange="saveSettings()"> Parametres</label>
                 </div>
                 <p style="font-size:11px;color:var(--fg-muted);margin-top:10px;line-height:1.5;">
-                    Par defaut, cet utilisateur a uniquement accès à la partie Pointage. L'administrateur peut modifier ses identifiants et ses accès.
+                    
                 </p>
             </div>
 
@@ -4496,6 +4492,8 @@ function exportEmployeesExcel() {
     createSimpleXlsx(rows, 'employes_' + todayStr() + '.xlsx');
     showToast('Liste des employes exportee vers Excel');
 }
+
+
 
 function importEmployeesExcel(event) {
     const file = event.target.files && event.target.files[0];
