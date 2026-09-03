@@ -2331,6 +2331,9 @@
 
     </style>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Lecteur code-barres compatible WebView / AppCreator24 -->
+    <script src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
+
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -3369,6 +3372,9 @@ const BARCODE_STORAGE_KEY = 'pp_scanner_attendance';
 let barcodeScannerStream = null;
 let barcodeScannerActive = false;
 let barcodeScannerTimer = null;
+let barcodeScannerControls = null;
+let barcodeScannerReader = null;
+let barcodeScannerDecodeBusy = false;
 let barcodeLastScanned = '';
 let barcodeLastScanAt = 0;
 let pendingBarcodePointage = null;
@@ -5167,73 +5173,181 @@ function scannerSupportedFormats() {
 
 async function startBarcodeScanner() {
     if (barcodeScannerActive) return;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        updateBarcodeScannerStatus(false, 'La caméra n’est pas disponible sur cet appareil ou dans ce contexte.');
-        showToast('Caméra non disponible', 'error');
-        return;
-    }
-    if (!('BarcodeDetector' in window)) {
-        updateBarcodeScannerStatus(false, 'Le lecteur natif de codes-barres n’est pas disponible dans ce navigateur.');
-        showToast('Lecteur code-barres non disponible', 'error');
-        return;
-    }
 
     const video = document.getElementById('barcodeScannerVideo');
     if (!video) return;
 
-    try {
-        let detector;
-        const supported = typeof BarcodeDetector.getSupportedFormats === 'function'
-            ? await BarcodeDetector.getSupportedFormats()
-            : scannerSupportedFormats();
-        const formats = scannerSupportedFormats().filter(f => supported.includes(f));
-        detector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+    // Important pour AppCreator24 : demander la caméra AVANT de tester
+    // la présence d'un moteur de lecture de code-barres.
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        updateBarcodeScannerStatus(false, 'La caméra n’est pas disponible dans cette WebView.');
+        showToast('Caméra non disponible', 'error');
+        return;
+    }
 
-        barcodeScannerStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false
-        });
+    // La caméra Web nécessite HTTPS. Ton URL GitHub Pages est HTTPS.
+    if (window.isSecureContext === false) {
+        updateBarcodeScannerStatus(false, 'La caméra nécessite une connexion HTTPS.');
+        showToast('HTTPS requis pour la caméra', 'error');
+        return;
+    }
+
+    try {
+        updateBarcodeScannerStatus(false, 'Demande d’accès à la caméra…');
+
+        // On ouvre d'abord la caméra. C'est volontaire : dans AppCreator24,
+        // cela permet à Android/WebView de traiter la demande de permission.
+        try {
+            barcodeScannerStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+        } catch (firstErr) {
+            // Certains appareils/WebView acceptent mieux une contrainte simple.
+            barcodeScannerStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' },
+                audio: false
+            });
+        }
+
         video.srcObject = barcodeScannerStream;
+        video.setAttribute('playsinline', 'true');
+        video.muted = true;
         await video.play();
+
         barcodeScannerActive = true;
         updateBarcodeScannerStatus(true, 'Présentez le badge devant la caméra.');
 
-        const scanLoop = async () => {
-            if (!barcodeScannerActive || !video.srcObject) return;
+        // Moteur principal : ZXing Browser.
+        // Il est beaucoup plus adapté ici que BarcodeDetector seul,
+        // notamment lorsque BarcodeDetector n'est pas exposé par la WebView.
+        if (window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader) {
+            barcodeScannerReader = new ZXingBrowser.BrowserMultiFormatReader();
+
+            barcodeScannerControls = await barcodeScannerReader.decodeFromVideoElement(
+                video,
+                (result, error) => {
+                    if (!barcodeScannerActive || !result) return;
+
+                    const rawValue = String(
+                        typeof result.getText === 'function'
+                            ? result.getText()
+                            : (result.text || result.rawValue || '')
+                    ).replace(/\s+/g, '').trim();
+
+                    if (rawValue) handleBarcodeDetected(rawValue);
+                }
+            );
+
+            return;
+        }
+
+        // Secours : BarcodeDetector si le WebView le fournit déjà.
+        if ('BarcodeDetector' in window) {
+            let supported = scannerSupportedFormats();
             try {
-                if (video.readyState >= 2) {
-                    const codes = await detector.detect(video);
-                    if (codes && codes.length) {
-                        const rawValue = String(codes[0].rawValue || '').replace(/\s+/g, '').trim();
-                        if (rawValue) handleBarcodeDetected(rawValue);
-                    }
+                if (typeof BarcodeDetector.getSupportedFormats === 'function') {
+                    const browserFormats = await BarcodeDetector.getSupportedFormats();
+                    supported = supported.filter(f => browserFormats.includes(f));
                 }
             } catch (e) {}
-            if (barcodeScannerActive) barcodeScannerTimer = requestAnimationFrame(scanLoop);
-        };
-        barcodeScannerTimer = requestAnimationFrame(scanLoop);
+
+            const detector = supported.length
+                ? new BarcodeDetector({ formats: supported })
+                : new BarcodeDetector();
+
+            const scanLoop = async () => {
+                if (!barcodeScannerActive || !video.srcObject) return;
+
+                if (!barcodeScannerDecodeBusy && video.readyState >= 2) {
+                    barcodeScannerDecodeBusy = true;
+                    try {
+                        const codes = await detector.detect(video);
+                        if (codes && codes.length) {
+                            const rawValue = String(codes[0].rawValue || '')
+                                .replace(/\s+/g, '').trim();
+                            if (rawValue) handleBarcodeDetected(rawValue);
+                        }
+                    } catch (e) {
+                        // Une image momentanément illisible n'est pas une erreur caméra.
+                    } finally {
+                        barcodeScannerDecodeBusy = false;
+                    }
+                }
+
+                if (barcodeScannerActive) {
+                    barcodeScannerTimer = requestAnimationFrame(scanLoop);
+                }
+            };
+
+            barcodeScannerTimer = requestAnimationFrame(scanLoop);
+            return;
+        }
+
+        // La caméra fonctionne, mais aucun moteur de décodage n'a été chargé.
+        stopBarcodeScanner();
+        updateBarcodeScannerStatus(false, 'Le lecteur de code-barres n’a pas pu être chargé.');
+        showToast('Lecteur code-barres indisponible. Vérifiez Internet.', 'error');
+
     } catch (err) {
         stopBarcodeScanner();
-        if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+
+        if (err && (err.name === 'NotAllowedError' ||
+                    err.name === 'PermissionDeniedError')) {
             updateBarcodeScannerStatus(false, 'Accès caméra refusé.');
             showToast('Permission caméra refusée', 'error');
+        } else if (err && err.name === 'NotFoundError') {
+            updateBarcodeScannerStatus(false, 'Aucune caméra disponible.');
+            showToast('Aucune caméra disponible', 'error');
+        } else if (err && err.name === 'NotReadableError') {
+            updateBarcodeScannerStatus(false, 'La caméra est utilisée par une autre application.');
+            showToast('Caméra déjà utilisée', 'error');
         } else {
-            updateBarcodeScannerStatus(false, 'Caméra non disponible. Vérifiez les autorisations de votre navigateur.');
-            showToast('Caméra non disponible', 'error');
+            updateBarcodeScannerStatus(
+                false,
+                'Impossible d’ouvrir la caméra. Vérifiez les autorisations Android.'
+            );
+            showToast('Impossible d’ouvrir la caméra', 'error');
         }
     }
 }
 
 function stopBarcodeScanner() {
     barcodeScannerActive = false;
-    if (barcodeScannerTimer) cancelAnimationFrame(barcodeScannerTimer);
+
+    if (barcodeScannerTimer) {
+        cancelAnimationFrame(barcodeScannerTimer);
+    }
     barcodeScannerTimer = null;
+    barcodeScannerDecodeBusy = false;
+
+    // Arrête proprement le moteur ZXing.
+    try {
+        if (barcodeScannerControls && typeof barcodeScannerControls.stop === 'function') {
+            barcodeScannerControls.stop();
+        }
+    } catch (e) {}
+    barcodeScannerControls = null;
+    barcodeScannerReader = null;
+
+    // Arrête toujours les pistes caméra, même si ZXing a rencontré une erreur.
     if (barcodeScannerStream) {
-        barcodeScannerStream.getTracks().forEach(track => track.stop());
+        try {
+            barcodeScannerStream.getTracks().forEach(track => track.stop());
+        } catch (e) {}
         barcodeScannerStream = null;
     }
+
     const video = document.getElementById('barcodeScannerVideo');
-    if (video) video.srcObject = null;
+    if (video) {
+        try { video.pause(); } catch (e) {}
+        video.srcObject = null;
+    }
+
     updateBarcodeScannerStatus(false, 'La caméra est arrêtée.');
 }
 
